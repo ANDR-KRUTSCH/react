@@ -4,6 +4,66 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Hello React</title>
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+
+            html {
+                background: white;
+            }
+
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif;
+                font-size: 18px;
+                line-height: 1.6;
+                -moz-osx-font-smoothing: grayscale;
+                -webkit-font-smoothing: antialiased;
+                text-rendering: optimizeSpeed;
+            }
+
+            input, button {
+                font: inherit;
+            }
+
+            td {
+                border-top: 1px solid black;
+                cursor: cell;
+                padding: 5px;
+            }
+
+            th {
+                cursor: pointer;
+                padding: 5px;
+            }
+
+            table {
+                border: 1px solid black;
+                margin: 20px;
+            }
+
+            .toolbar {
+                margin-left: 20px;
+            }
+
+            .toolbar a, .toolbar button {
+                background: #3498db linear-gradient(to bottom, #3498db, #2980b9);
+                border-radius: 0.3em;
+                border: 0;
+                box-shadow: 0 1px 3px #666;
+                color: #fff;
+                cursor: pointer;
+                display: inline-block;
+                margin-right: 5px;
+                padding: 10px 20px;
+                text-decoration: none;
+            }
+
+            .toolbar a:hover, .toolbar button:hover {
+                background: #3cb0fd linear-gradient(to bottom, #3cb0fd, #3498db);
+                text-decoration: none;
+            }
+        </style>
     </head>
     <body>
         <div id="app"></div>
@@ -11,87 +71,326 @@
         <script src="https://unpkg.com/react/umd/react.production.min.js"></script>
         <script src="https://unpkg.com/react-dom/umd/react-dom.production.min.js"></script>
         <script src="https://unpkg.com/babel-standalone/babel.min.js"></script>
+        <script src="https://unpkg.com/prop-types/prop-types.js"></script>
 
         <script type="text/babel">
-            class LifecycleLoggerComponent extends React.PureComponent {
-                static getName() {};
+            function clone(object) {
+                return JSON.parse(JSON.stringify(object));
+            };
 
-                componentDidMount() {
-                    console.log(this.constructor.getName() + '::componentDidMount');
+            const headers = ['Book', 'Author', 'Language', 'Published', 'Sales'];
+
+            const data = [
+                ['A Tale of Two Cities', 'Charles Dickens', 'English', '1859', '200 million'],
+                ['Le Petit Prince (The Little Prince)', 'Antoine de Saint-Exupery', 'French', '1943', '150 million'],
+                ['Harry Potter and Philosopher\'s Stone', 'J. K. Rowling', 'English', '1997', '120 million'],
+                ['And Then There Were None', 'Agatha Cristie', 'English', '1939', '100 million'],
+                ['Dream of the Red Chamber', 'Cao Xueqin', 'Chinese', '1791', '100 million'],
+                ['The Hobbit', 'J. R. R. Tolkien', 'English', '1937', '100 million'],
+            ];
+
+
+            class Excel extends React.Component {
+                constructor(props) {
+                    super();
+                    
+                    // Добавление ID к каждой строке для идентификации строк при внесении изменений во время осуществления поиска.
+                    const data = clone(props.initialData).map((row, id) => {
+                        row.push(id);
+                        return row;
+                    });
+                    
+                    this.state = {
+                        data: data,
+                        // Порядковый номер столбца, по которому осуществлялась сортировка в последний раз.
+                        sortedBy: null,
+                        descending: false,
+                        editingCell: null, // {row: <index>, column: <index>}
+                        searchActivity: false,
+                    };
+
+                    this.log = [clone(this.state)];
+
+                    // Временное хранилище, куда сохраняются данные во время осуществления поиска. 
+                    this.savedData = null;
+
+                    this.logSetState = this.logSetState.bind(this);
+                    
+                    this.displayCellEditor = this.displayCellEditor.bind(this);
+                    this.shouldDisplaySearchRow = this.shouldDisplaySearchRow.bind(this);
+                    this.displaySearchRow = this.displaySearchRow.bind(this);
+
+                    this.sort = this.sort.bind(this);
+                    this.search = this.search.bind(this);
+                    this.save = this.save.bind(this);
+
+                    this.downloadJSON = this.download.bind(this, 'json');
+                    this.downloadCSV = this.download.bind(this, 'csv');
+
+                    this.keydownHandler = this.keydownHandler.bind(this);
+                    this.replayID = null;
+                    this.replay = this.replay.bind(this);
                 };
 
-                // shouldComponentUpdate(newProps, newState) {
-                //     console.log(this.constructor.getName() + '::shouldComponentUpdate', newProps, newState);
-                //     return true;
-                // };
-
-                getSnapshotBeforeUpdate(prevProps, prevState) {
-                    console.log(this.constructor.getName() + '::getSnapshotBeforeUpdate', prevProps, prevState);
-                    return null;
+                logSetState(newState) {
+                    this.log.push(newState);
+                    this.setState(newState);
                 };
 
-                componentDidUpdate(prevProps, prevState, snapshot) {
-                    console.log(this.constructor.getName() + '::componentDidUpdate', prevProps, prevState, snapshot);
+                replay() {
+                    // Если изменения отсутствуют:
+                    if (this.log.length === 1) {
+                        console.warn('No state changes to replay yet.');
+                        return;
+                    };
+                    // Если изменения присутствуют:
+                    let state = this.log.length - 2;
+                    this.replayID = setInterval(() => {
+                        if (state === 0) {
+                            this.setState(this.log[state]);
+                            clearInterval(this.replayID);
+                        } else {
+                            this.setState(this.log[state]);
+                            state--;
+                        };
+                    }, 1000);
+                };
+
+                keydownHandler(event) {
+                    if (event.altKey && event.shiftKey && event.keyCode === 82) { // Alt+Shift+R
+                            this.replay();
+                    };
+                };
+
+                async componentDidMount() {
+                    document.addEventListener('keydown', this.keydownHandler);
+                    // const response = await fetch('URL');
+                    // const initialData = await response.json();
+                    // const data = initialData.map((row, id) => {
+                    //     row.push(id);
+                    //     return row;
+                    // });
+                    // this.setState({data: data});
                 };
 
                 componentWillUnmount() {
-                    console.log(this.constructor.getName() + '::componentWillUnmount');
+                    document.removeEventListener('keydown', this.keydownHandler);
+                    clearInterval(this.replayID);
                 };
-            };
 
+                isSearchActive() {
+                    if (this.state.searchActivity) return true;
+                    else return false;
+                };
 
-            class Counter extends LifecycleLoggerComponent {
-                static getName() {
-                    return 'Counter';
+                activateSearch() {
+                    this.logSetState({searchActivity: true});
+                };
+
+                deactivateSearch() {
+                    this.logSetState({searchActivity: false});
+                };
+
+                saveDataBeforeSearch() {
+                    this.savedData = this.state.data;
+                };
+
+                loadDataAfterSearch() {
+                    this.logSetState({data: this.savedData});
+                    this.savedData = null;
+                };
+
+                displaySearchedData(data) {
+                    this.logSetState({data: data});
+                };
+
+                displaySearchRow() {
+                    return (
+                        <tr onChange={this.search}>
+                            {this.props.headers.map((_, id) => <td><input type="text" data-id={id} /></td>)}
+                        </tr>
+                    );
+                };
+
+                sort(event) {
+                    const column = event.target.cellIndex;
+                    const descending = this.state.sortedBy === column && !this.state.descending;
+                    
+                    const data = clone(this.state.data);
+                    data.sort((a, b) => {
+                        if (a[column] === b[column]) return 0;
+
+                        return descending ? a[column] < b[column] ? 1 : -1 : a [column] > b[column] ? 1 : -1;
+                        //                  ^                              ^                                ^
+                        //                  | Сортировка по убыванию       | Сортировка по возрастанию      |
+                        //                  |------------------------------|--------------------------------|
+                    });
+
+                    this.logSetState({
+                        data: data,
+                        sortedBy: column,
+                        descending: descending,
+                    });
+                };
+
+                displayCellEditor(event) {
+                    this.logSetState({
+                        editingCell: {
+                            row: parseInt(event.target.parentNode.dataset.row, 10),
+                            column: event.target.cellIndex,
+                        },
+                    });
+                };
+
+                save(event) {
+                    // Сохранение внесенных изменений в результате редактирования ячейки.
+
+                    event.preventDefault();
+
+                    const cellEditor = event.target.firstChild;
+
+                    const data = clone(this.state.data).map(row => {
+                        if (row[row.length - 1] === this.state.editingCell.row) {
+                            row[this.state.editingCell.column] = cellEditor.value;
+                        };
+                        return row;
+                    });
+
+                    this.logSetState({
+                        editingCell: null,
+                        data: data,
+                    });
+
+                    // Сохранить изменения, внесенные в ячейки во время осуществления поиска.
+                    if (this.savedData) {
+                        this.savedData[this.state.editingCell.row][this.state.editingCell.column] = cellEditor.value;
+                    };
+                };
+
+                shouldDisplaySearchRow(event) {
+                    // Если поиск активен:
+                    if (this.isSearchActive()) {
+                        this.deactivateSearch();
+                        this.loadDataAfterSearch();
+                    // Если поиск неактивен:
+                    } else {
+                        this.saveDataBeforeSearch();
+                        this.activateSearch();
+                    };
+                };
+
+                search(event) {
+                    // Получить поле ввода поиска для того или иного столбца.
+                    const searchInputNode = event.target;
+                    // Данные, подлежащие поиску (могут отсутствовать если пользователь ничего не ввёл).
+                    const searchingData = searchInputNode.value.toLowerCase();
+
+                    // Если данные отсутствуют, восстановить таблицу.
+                    if (!searchingData) {
+                        this.logSetState({data: this.savedData});
+                        return;
+                    };
+
+                    // Получить индекс столбца, по которому осуществляется поиск.
+                    const id = searchInputNode.dataset.id;
+                    
+                    // Фильтрация осуществляется следующим образом:
+                    // 1. Метод "filter" перебирает каждый элемент массива (в данному случае списки, которые представляют строки);
+                    // 2. Строки (списки) состоят из столбцов (элементов списка) и в каждой строке выбирается столбец, по которому осуществляется поиск;
+                    // 3. Для столбца (элемента массива) вызываются методы приведения типа к строке и перевод строки в нижний регистр;
+                    // 4. Для строки (столбца) вызывается метод "indexOf", который возвращает индекс элемента. Например: 'string'.indexOf('tr') => 1, 'string'.indexOf('a') => -1;
+                    // 5. Происходит сравнение возвращенного индекса с числом -1.
+                    //    Если поиск успешен, результатом сравнения становится значение true и строка попадает в итоговый результат фильтрации (список). 
+                    const searchedData = this.savedData.filter(row => row[id].toString().toLowerCase().indexOf(searchingData) > -1);
+                    
+                    this.displaySearchedData(searchedData);
+                };
+
+                download(format, event) {
+                    // Удаление ID строк.
+                    const data = clone(this.state.data).map(row => {
+                        row.pop();
+                        return row;
+                    });
+
+                    let contents = new String();
+
+                    if (format === 'json') {
+                        contents = JSON.stringify(data);
+                    } else {
+                        for (let row of data) {
+                            row = ''.concat(row.map(cell => `"${cell}"`)) + '\n';
+                            contents = contents + row;
+                        };
+                    };
+
+                    const URL = window.URL || window.webkitURL;
+                    const blob = new Blob([contents], {type: 'text/' + format});
+                    event.target.href = URL.createObjectURL(blob);
+                    event.target.download = 'data.' + format;
                 };
 
                 render() {
-                    return this.props.length;
-                };
-            };
-
-
-            class TextareaWithCounterComponent extends LifecycleLoggerComponent {
-                constructor() {
-                    super();
-                    this.state = {};
-                };
-
-                static getName() {
-                    return 'TextareaWithCounterComponent';
-                };
-
-                onTextChange(event) {
-                    this.setState({text: event.target.value});
-                };
-
-                render() {
-                    const text = 'text' in this.state ? this.state.text : this.props.text;
-
                     return (
                         <div>
-                            <textarea value={text} onChange={event => this.onTextChange(event)} />
-                            <br />
-                            <span>Length: </span> 
-                            {
-                                text.length > 0 ? <Counter length={text.length} /> : null
-                            }
+                            <div className="toolbar">
+                                <button className={toolbar} onClick={this.shouldDisplaySearchRow}>{this.isSearchActive() ? 'Hide Search' : 'Display Search'}</button>
+                                <a href="data.json" onClick={this.downloadJSON}>Export JSON</a>
+                                <a href="data.csv" onClick={this.downloadCSV}>Export CSV</a>
+                            </div>
+                            <table>
+                                <thead onClick={this.sort}>
+                                    <tr>
+                                        {this.props.headers.map((title, id) => {
+                                            if (this.state.sortedBy === id) title += this.state.descending ? ' \u2191' : ' \u2193';
+                                            return <th>{title}</th>;
+                                        })}
+                                    </tr>
+                                </thead>
+                                {
+                                    this.state.data.length === 0 ? (
+                                    <tbody>
+                                        <tr>
+                                            <td colSpan={this.props.headers.length}>Loading data...</td>    
+                                        </tr>    
+                                    </tbody>
+                                ) : (<tbody onDoubleClick={this.displayCellEditor}>
+                                    {this.isSearchActive() ? this.displaySearchRow() : null}
+                                    {
+                                        this.state.data.map((row, rowID) => {
+                                            const recordID = row[row.length - 1];
+
+                                            return (
+                                                <tr data-row={recordID}>{
+                                                    row.map((cell, columnID) => {
+                                                        if (columnID === this.props.headers.length) return;
+
+                                                        const editingCell = this.state.editingCell;
+
+                                                        if (editingCell && editingCell.row === recordID && editingCell.column === columnID) {
+                                                            cell = <form onSubmit={this.save}><input type="text" defaultValue={cell} /></form>
+                                                        };
+
+                                                        return <td>{cell}</td>;
+                                                    })
+                                                }</tr>
+                                            );
+                                        })
+                                    }
+                                </tbody>)}
+                            </table>
                         </div>
                     );
                 };
             };
 
-            
-            Counter.defaultProps = {
-                length: 0,
-            };
-
-            TextareaWithCounterComponent.defaultProps = {
-                text: 'Text',
-            };
+            // Excel.propTypes = {
+            //     headers: PropTypes.arrayOf(PropTypes.any),
+            //     initialData: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.any)),
+            // };
 
             ReactDOM.render(
-                <TextareaWithCounterComponent />,
+                <Excel headers={headers} initialData={data} />,
                 document.getElementById('app')
             );
         </script>
